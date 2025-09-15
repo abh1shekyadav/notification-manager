@@ -1,13 +1,20 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
+
+	"github.com/abh1shekyadav/notification-manager/internal/user"
 )
 
 func main() {
-	port := ":8080"
-	fmt.Printf("Starting server on port %s\n", port)
-	log.Fatal(http.ListenAndServe(port, nil))
+	userRepo := user.NewInMemoryRepo()
+	userService := user.NewUserService(userRepo)
+	userHandler := user.NewUserHandler(userService)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/user/register", userHandler.RegisterUser)
+	log.Println("Server running on :8080")
+	if err := http.ListenAndServe(":8080", mux); err != nil {
+		log.Fatal(err)
+	}
 }

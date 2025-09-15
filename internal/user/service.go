@@ -37,7 +37,7 @@ func (s *UserService) RegisterUser(email, password string) (*User, error) {
 		return nil, err
 	}
 	user := &User{
-		ID:        uuid.NewString,
+		ID:        uuid.NewString(),
 		Email:     email,
 		Password:  string(hashedPassword),
 		CreatedAt: time.Now(),
