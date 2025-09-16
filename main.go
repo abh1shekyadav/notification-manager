@@ -4,11 +4,17 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/abh1shekyadav/notification-manager/internal/db"
 	"github.com/abh1shekyadav/notification-manager/internal/user"
 )
 
 func main() {
-	userRepo := user.NewInMemoryRepo()
+	db, err := db.InitDB()
+	if err != nil {
+		log.Fatal("Failed to connect to DB:", err)
+	}
+	defer db.Close()
+	userRepo := user.NewPostgresRepo(db)
 	userService := user.NewUserService(userRepo)
 	userHandler := user.NewUserHandler(userService)
 	mux := http.NewServeMux()

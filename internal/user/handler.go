@@ -31,13 +31,14 @@ func (h *UserHandler) RegisterUser(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	resp := UserResponse{
+		ID:        user.ID,
+		Email:     user.Email,
+		CreatedAt: user.CreatedAt,
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{
-		"message": "User registered successfully",
-		"email":   user.Email,
-		"id":      user.ID,
-	})
+	json.NewEncoder(w).Encode(resp)
 }
 
 func (h *UserHandler) FindUserByEmail(w http.ResponseWriter, r *http.Request) {
@@ -57,5 +58,6 @@ func (h *UserHandler) FindUserByEmail(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: user.CreatedAt,
 	}
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(resp)
 }

@@ -1,0 +1,15 @@
+package db
+
+import "database/sql"
+
+func InitDB() (*sql.DB, error) {
+	connStr := "postgres://user:password@localhost:5432/notification_manager_db?sslmode=disable"
+	db, err := sql.Open("postgres", connStr)
+	if err != nil {
+		return nil, err
+	}
+	if err := db.Ping(); err != nil {
+		return nil, err
+	}
+	return db, nil
+}
