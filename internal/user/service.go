@@ -46,5 +46,11 @@ func (s *UserService) RegisterUser(email, password string) (*User, error) {
 		return nil, err
 	}
 	return user, nil
+}
 
+func (s *UserService) FindUserByEmail(email string) (*User, error) {
+	if email == "" {
+		return nil, ErrInvalidInput
+	}
+	return s.repo.FindUserByEmail(email)
 }

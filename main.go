@@ -12,7 +12,8 @@ func main() {
 	userService := user.NewUserService(userRepo)
 	userHandler := user.NewUserHandler(userService)
 	mux := http.NewServeMux()
-	mux.HandleFunc("/user/register", userHandler.RegisterUser)
+	mux.HandleFunc("/users/register", userHandler.RegisterUser)
+	mux.HandleFunc("/users", userHandler.FindUserByEmail)
 	log.Println("Server running on :8080")
 	if err := http.ListenAndServe(":8080", mux); err != nil {
 		log.Fatal(err)

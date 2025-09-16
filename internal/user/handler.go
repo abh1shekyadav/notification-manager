@@ -39,3 +39,23 @@ func (h *UserHandler) RegisterUser(w http.ResponseWriter, r *http.Request) {
 		"id":      user.ID,
 	})
 }
+
+func (h *UserHandler) FindUserByEmail(w http.ResponseWriter, r *http.Request) {
+	email := r.URL.Query().Get("email")
+	user, err := h.userService.FindUserByEmail(email)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if user == nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+	resp := UserResponse{
+		ID:        user.ID,
+		Email:     user.Email,
+		CreatedAt: user.CreatedAt,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
