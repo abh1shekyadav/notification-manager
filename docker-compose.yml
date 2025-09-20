@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: notif-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: notificationdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    build: .
+    container_name: notif-app
+    depends_on:
+      - postgres
+    environment:
+      DB_CONN: postgres://postgres:postgres@postgres:5432/notificationdb?sslmode=disable
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:
