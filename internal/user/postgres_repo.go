@@ -20,7 +20,7 @@ func (r *PostgresRepo) IsEmailRegistered(email string) (bool, error) {
 }
 
 func (r *PostgresRepo) RegisterUser(user *User) error {
-	_, err := r.db.Exec("INSERT INTO users (id, emaiil, password, created_at) VALUES ($1, $2, $3, $4)",
+	_, err := r.db.Exec("INSERT INTO users (id, email, password, created_at) VALUES ($1, $2, $3, $4)",
 		user.ID, user.Email, user.Password, user.CreatedAt)
 	return err
 }

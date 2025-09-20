@@ -13,6 +13,9 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to connect to DB:", err)
 	}
+	if db == nil {
+		log.Fatal("Database connection is nil. Check DB_CONN environment variable")
+	}
 	defer db.Close()
 	userRepo := user.NewPostgresRepo(db)
 	userService := user.NewUserService(userRepo)

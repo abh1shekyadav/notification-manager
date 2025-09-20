@@ -1,15 +1,24 @@
 package db
 
-import "database/sql"
+import (
+	"database/sql"
+	"fmt"
+	"os"
+
+	_ "github.com/lib/pq"
+)
 
 func InitDB() (*sql.DB, error) {
-	connStr := "postgres://user:password@localhost:5432/notification_manager_db?sslmode=disable"
+	connStr := os.Getenv("DB_CONN")
+	if connStr == "" {
+		return nil, fmt.Errorf("DB_CONN environment variable is not set")
+	}
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open DB: %w", err)
 	}
 	if err := db.Ping(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to ping DB: %w", err)
 	}
 	return db, nil
 }
