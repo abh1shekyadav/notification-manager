@@ -4,8 +4,10 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/abh1shekyadav/notification-manager/internal/auth"
 	"github.com/abh1shekyadav/notification-manager/internal/db"
 	"github.com/abh1shekyadav/notification-manager/internal/user"
+	"github.com/abh1shekyadav/notification-manager/middleware"
 )
 
 func main() {
@@ -17,12 +19,31 @@ func main() {
 		log.Fatal("Database connection is nil. Check DB_CONN environment variable")
 	}
 	defer db.Close()
+	secret := "supersecret"
+	validator := auth.NewHMACValidator(secret)
+	exempt := map[string]bool{
+		"/users/register": true,
+		"/auth/login":     true,
+		"/users":          false,
+	}
 	userRepo := user.NewPostgresRepo(db)
 	userService := user.NewUserService(userRepo)
 	userHandler := user.NewUserHandler(userService)
+	authService := auth.NewAuthService(userRepo, validator)
+	authHandler := auth.NewAuthHandler(authService)
 	mux := http.NewServeMux()
-	mux.HandleFunc("/users/register", userHandler.RegisterUser)
-	mux.HandleFunc("/users", userHandler.FindUserByEmail)
+	mux.HandleFunc("/users/register", middleware.Chain(userHandler.RegisterUser,
+		middleware.LoggingMiddleware,
+		middleware.AuthMiddleware(exempt, validator),
+	))
+	mux.HandleFunc("/users", middleware.Chain(userHandler.FindUserByEmail,
+		middleware.LoggingMiddleware,
+		middleware.AuthMiddleware(exempt, validator),
+	))
+	mux.HandleFunc("/auth/login", middleware.Chain(authHandler.Login,
+		middleware.LoggingMiddleware,
+		middleware.AuthMiddleware(exempt, validator),
+	))
 	log.Println("Server running on :8080")
 	if err := http.ListenAndServe(":8080", mux); err != nil {
 		log.Fatal(err)

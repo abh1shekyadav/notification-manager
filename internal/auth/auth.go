@@ -1,5 +1,5 @@
 package auth
 
 type AuthValidator interface {
-	ValidateToken(token string) (string, error)
+	ValidateToken(token string) (map[string]interface{}, error)
 }
