@@ -18,6 +18,7 @@ services:
       - postgres
     environment:
       DB_CONN: postgres://postgres:postgres@postgres:5432/notificationdb?sslmode=disable
+      JWT_SECRET: supersecretkey
     ports:
       - "8080:8080"
 

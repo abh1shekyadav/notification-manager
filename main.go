@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/abh1shekyadav/notification-manager/internal/auth"
 	"github.com/abh1shekyadav/notification-manager/internal/db"
@@ -19,7 +20,10 @@ func main() {
 		log.Fatal("Database connection is nil. Check DB_CONN environment variable")
 	}
 	defer db.Close()
-	secret := "supersecret"
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		log.Fatal("Secret is required")
+	}
 	validator := auth.NewHMACValidator(secret)
 	exempt := map[string]bool{
 		"/users/register": true,
@@ -29,7 +33,7 @@ func main() {
 	userRepo := user.NewPostgresRepo(db)
 	userService := user.NewUserService(userRepo)
 	userHandler := user.NewUserHandler(userService)
-	authService := auth.NewAuthService(userRepo, validator)
+	authService := auth.NewAuthService(userRepo, secret)
 	authHandler := auth.NewAuthHandler(authService)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/users/register", middleware.Chain(userHandler.RegisterUser,

@@ -10,16 +10,17 @@ import (
 type AuthService struct {
 	userRepo  user.UserRepository
 	validator AuthValidator
+	secret    string
 }
 
-func NewAuthService(userRepo user.UserRepository, validator AuthValidator) *AuthService {
+func NewAuthService(userRepo user.UserRepository, secret string) *AuthService {
 	return &AuthService{
-		userRepo:  userRepo,
-		validator: validator,
+		userRepo: userRepo,
+		secret:   secret,
 	}
 }
 
-func (s *AuthService) Login(email, password string) (string, error) {
+func (s *AuthService) Login(email, password, secret string) (string, error) {
 	user, err := s.userRepo.FindUserByEmail(email)
 	if err != nil {
 		return "", errors.New("invalid email or password")
@@ -27,7 +28,7 @@ func (s *AuthService) Login(email, password string) (string, error) {
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
 		return "", errors.New("invalid email or password")
 	}
-	token, err := GenerateJWT(user.ID, user.Email, "supersecret")
+	token, err := GenerateJWT(user.ID, user.Email, secret)
 	if err != nil {
 		return "", err
 	}

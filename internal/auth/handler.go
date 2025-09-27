@@ -19,7 +19,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	token, err := h.authService.Login(req.Email, req.Password)
+	token, err := h.authService.Login(req.Email, req.Password, h.authService.secret)
 	if err != nil {
 		http.Error(w, "Login failed: "+err.Error(), http.StatusUnauthorized)
 		return
