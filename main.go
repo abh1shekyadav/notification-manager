@@ -32,6 +32,7 @@ func main() {
 		"/auth/login":     true,
 		"/users":          false,
 		"/notify":         false,
+		"/notification":   false,
 	}
 	userRepo := user.NewPostgresRepo(db)
 	userService := user.NewUserService(userRepo)
@@ -59,6 +60,11 @@ func main() {
 		middleware.LoggingMiddleware,
 		middleware.AuthMiddleware(exempt, validator),
 	))
+	mux.HandleFunc("/notification", middleware.Chain(notificationHandler.FindNotificationById,
+		middleware.LoggingMiddleware,
+		middleware.AuthMiddleware(exempt, validator),
+	))
+
 	log.Println("Server running on :8080")
 	if err := http.ListenAndServe(":8080", mux); err != nil {
 		log.Fatal(err)

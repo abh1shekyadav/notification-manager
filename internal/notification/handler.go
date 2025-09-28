@@ -27,3 +27,18 @@ func (h *NotificationHandler) Notify(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(notification)
 }
+
+func (h *NotificationHandler) FindNotificationById(w http.ResponseWriter, r *http.Request) {
+	notificationId := r.URL.Query().Get("notification_id")
+	if notificationId == "" {
+		http.Error(w, "notification_id is required", http.StatusBadRequest)
+		return
+	}
+	notification, err := h.service.FindNotificationById(notificationId)
+	if err != nil || notification == nil {
+		http.Error(w, "failed to get notification", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(notification)
+}

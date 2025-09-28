@@ -28,3 +28,7 @@ func (s *NotificationService) Notify(req NotificationRequest) (*Notification, er
 	}
 	return notification, nil
 }
+
+func (s *NotificationService) FindNotificationById(notificationId string) (*Notification, error) {
+	return s.repo.FindById(notificationId)
+}

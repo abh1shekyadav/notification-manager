@@ -4,6 +4,7 @@ import "database/sql"
 
 type NotificationRepository interface {
 	Save(notification *Notification) error
+	FindById(notificationId string) (*Notification, error)
 }
 
 type NotificationRepo struct {
@@ -21,4 +22,21 @@ func (r *NotificationRepo) Save(notification *Notification) error {
 		notification.ID, notification.UserID, notification.Type,
 		notification.Payload, notification.Status, notification.CreatedAt)
 	return err
+}
+
+func (r *NotificationRepo) FindById(notificationId string) (*Notification, error) {
+	row := r.db.QueryRow(`
+		SELECT id, user_id, type, payload, status, created_at
+		FROM notifications WHERE id = $1`, notificationId)
+
+	var notification Notification
+	err := row.Scan(&notification.ID, &notification.UserID, &notification.Type,
+		&notification.Payload, &notification.Status, &notification.CreatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &notification, nil
 }
