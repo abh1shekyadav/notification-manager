@@ -4,38 +4,44 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/abh1shekyadav/notification-manager/internal/auth"
 	"github.com/abh1shekyadav/notification-manager/internal/db"
+	"github.com/abh1shekyadav/notification-manager/internal/notification"
 	"github.com/abh1shekyadav/notification-manager/internal/user"
 	"github.com/abh1shekyadav/notification-manager/middleware"
 )
 
 func main() {
-	db, err := db.InitDB()
+	mux := http.NewServeMux()
+
+	dbConn, err := db.InitDB()
 	if err != nil {
 		log.Fatal("Failed to connect to DB:", err)
 	}
-	if db == nil {
+	if dbConn == nil {
 		log.Fatal("Database connection is nil. Check DB_CONN environment variable")
 	}
-	defer db.Close()
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		log.Fatal("Secret is required")
-	}
+	defer dbConn.Close()
+
+	// JWT validator
+	secret := getEnvOrFatal("JWT_SECRET")
 	validator := auth.NewHMACValidator(secret)
+
+	// Routes exempted from auth
 	exempt := map[string]bool{
 		"/users/register": true,
 		"/auth/login":     true,
 		"/users":          false,
+		"/notify":         false,
+		"/notification":   false,
 	}
-	userRepo := user.NewPostgresRepo(db)
+
+	// User management
+	userRepo := user.NewPostgresRepo(dbConn)
 	userService := user.NewUserService(userRepo)
 	userHandler := user.NewUserHandler(userService)
-	authService := auth.NewAuthService(userRepo, secret)
-	authHandler := auth.NewAuthHandler(authService)
-	mux := http.NewServeMux()
 	mux.HandleFunc("/users/register", middleware.Chain(userHandler.RegisterUser,
 		middleware.LoggingMiddleware,
 		middleware.AuthMiddleware(exempt, validator),
@@ -44,12 +50,46 @@ func main() {
 		middleware.LoggingMiddleware,
 		middleware.AuthMiddleware(exempt, validator),
 	))
+
+	// Auth
+	authService := auth.NewAuthService(userRepo, secret)
+	authHandler := auth.NewAuthHandler(authService)
 	mux.HandleFunc("/auth/login", middleware.Chain(authHandler.Login,
 		middleware.LoggingMiddleware,
 		middleware.AuthMiddleware(exempt, validator),
 	))
+
+	// Notifications
+	notificationRepo := notification.NewNotificationRepo(dbConn)
+	brokers := strings.Split(getEnvOrFatal("KAFKA_BROKERS"), ",")
+	topic := getEnvOrFatal("KAFKA_TOPIC")
+	producer := notification.NewKafkaProducer(brokers, topic)
+	notificationService := notification.NewNotificationService(notificationRepo, producer)
+	notificationHandler := notification.NewNotificationHandler(notificationService)
+
+	// Start Kafka consumer
+	notification.StartConsumer(brokers, topic, notificationRepo)
+
+	// Notification routes
+	mux.HandleFunc("/notify", middleware.Chain(notificationHandler.Notify,
+		middleware.LoggingMiddleware,
+		middleware.AuthMiddleware(exempt, validator),
+	))
+	mux.HandleFunc("/notification", middleware.Chain(notificationHandler.FindNotificationByID,
+		middleware.LoggingMiddleware,
+		middleware.AuthMiddleware(exempt, validator),
+	))
+
 	log.Println("Server running on :8080")
 	if err := http.ListenAndServe(":8080", mux); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func getEnvOrFatal(key string) string {
+	val := os.Getenv(key)
+	if val == "" {
+		log.Fatalf("Environment variable %s is required", key)
+	}
+	return val
 }
