@@ -5,6 +5,7 @@ import "database/sql"
 type NotificationRepository interface {
 	Save(notification *Notification) error
 	FindById(notificationId string) (*Notification, error)
+	UpdateStatus(notificationId string, status string) error
 }
 
 type NotificationRepo struct {
@@ -39,4 +40,10 @@ func (r *NotificationRepo) FindById(notificationId string) (*Notification, error
 		return nil, err
 	}
 	return &notification, nil
+}
+
+func (r *NotificationRepo) UpdateStatus(notificationId string, status string) error {
+	_, err := r.db.Exec(`
+		UPDATE notifications SET status = $1 WHERE id = $2`, status, notificationId)
+	return err
 }

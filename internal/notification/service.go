@@ -7,11 +7,12 @@ import (
 )
 
 type NotificationService struct {
-	repo NotificationRepository
+	repo     NotificationRepository
+	producer *KafkaProducer
 }
 
-func NewNotificationService(repo NotificationRepository) *NotificationService {
-	return &NotificationService{repo: repo}
+func NewNotificationService(repo NotificationRepository, producer *KafkaProducer) *NotificationService {
+	return &NotificationService{repo: repo, producer: producer}
 }
 
 func (s *NotificationService) Notify(req NotificationRequest) (*Notification, error) {
@@ -24,6 +25,9 @@ func (s *NotificationService) Notify(req NotificationRequest) (*Notification, er
 		CreatedAt: time.Now(),
 	}
 	if err := s.repo.Save(notification); err != nil {
+		return nil, err
+	}
+	if err := s.producer.Publish(notification); err != nil {
 		return nil, err
 	}
 	return notification, nil

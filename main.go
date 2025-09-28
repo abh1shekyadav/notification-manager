@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/abh1shekyadav/notification-manager/internal/auth"
 	"github.com/abh1shekyadav/notification-manager/internal/db"
@@ -22,10 +23,7 @@ func main() {
 		log.Fatal("Database connection is nil. Check DB_CONN environment variable")
 	}
 	defer db.Close()
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		log.Fatal("Secret is required")
-	}
+	secret := getEnvOrFatal("JWT_SECRET")
 	validator := auth.NewHMACValidator(secret)
 	exempt := map[string]bool{
 		"/users/register": true,
@@ -54,8 +52,12 @@ func main() {
 	))
 
 	notificationRepo := notification.NewNotifcationRepo(db)
-	notificationService := notification.NewNotificationService(notificationRepo)
+	brokers := strings.Split(getEnvOrFatal("KAFKA_BROKERS"), ",")
+	topic := getEnvOrFatal("KAFKA_TOPIC")
+	producer := notification.NewKafkaProducer(brokers, topic)
+	notificationService := notification.NewNotificationService(notificationRepo, producer)
 	notificationHandler := notification.NewNotificationHandler(notificationService)
+	notification.StartConsumer(brokers, topic, notificationRepo)
 	mux.HandleFunc("/notify", middleware.Chain(notificationHandler.Notify,
 		middleware.LoggingMiddleware,
 		middleware.AuthMiddleware(exempt, validator),
@@ -69,4 +71,12 @@ func main() {
 	if err := http.ListenAndServe(":8080", mux); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func getEnvOrFatal(key string) string {
+	val := os.Getenv(key)
+	if val == "" {
+		log.Fatalf("Environment variable %s is required", key)
+	}
+	return val
 }
