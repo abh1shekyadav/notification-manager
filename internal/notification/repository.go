@@ -1,18 +1,21 @@
 package notification
 
-import "database/sql"
+import (
+	"database/sql"
+	"encoding/json"
+)
 
 type NotificationRepository interface {
 	Save(notification *Notification) error
-	FindById(notificationId string) (*Notification, error)
-	UpdateStatus(notificationId string, status string) error
+	FindByID(notificationID string) (*Notification, error)
+	UpdateStatus(notificationID string, status string) error
 }
 
 type NotificationRepo struct {
 	db *sql.DB
 }
 
-func NewNotifcationRepo(db *sql.DB) *NotificationRepo {
+func NewNotificationRepo(db *sql.DB) *NotificationRepo {
 	return &NotificationRepo{db: db}
 }
 
@@ -21,29 +24,32 @@ func (r *NotificationRepo) Save(notification *Notification) error {
 		INSERT INTO notifications (id, user_id, type, payload, status, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6)`,
 		notification.ID, notification.UserID, notification.Type,
-		notification.Payload, notification.Status, notification.CreatedAt)
+		string(notification.Payload), notification.Status, notification.CreatedAt)
 	return err
 }
 
-func (r *NotificationRepo) FindById(notificationId string) (*Notification, error) {
+func (r *NotificationRepo) FindByID(notificationID string) (*Notification, error) {
 	row := r.db.QueryRow(`
 		SELECT id, user_id, type, payload, status, created_at
-		FROM notifications WHERE id = $1`, notificationId)
+		FROM notifications WHERE id = $1`, notificationID)
 
 	var notification Notification
+	var payloadText string
 	err := row.Scan(&notification.ID, &notification.UserID, &notification.Type,
-		&notification.Payload, &notification.Status, &notification.CreatedAt)
+		&payloadText, &notification.Status, &notification.CreatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, err
 	}
+
+	notification.Payload = json.RawMessage(payloadText)
 	return &notification, nil
 }
 
-func (r *NotificationRepo) UpdateStatus(notificationId string, status string) error {
+func (r *NotificationRepo) UpdateStatus(notificationID string, status string) error {
 	_, err := r.db.Exec(`
-		UPDATE notifications SET status = $1 WHERE id = $2`, status, notificationId)
+		UPDATE notifications SET status = $1, updated_at = now() WHERE id = $2`, status, notificationID)
 	return err
 }

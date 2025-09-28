@@ -15,16 +15,21 @@ import (
 
 func main() {
 	mux := http.NewServeMux()
-	db, err := db.InitDB()
+
+	dbConn, err := db.InitDB()
 	if err != nil {
 		log.Fatal("Failed to connect to DB:", err)
 	}
-	if db == nil {
+	if dbConn == nil {
 		log.Fatal("Database connection is nil. Check DB_CONN environment variable")
 	}
-	defer db.Close()
+	defer dbConn.Close()
+
+	// JWT validator
 	secret := getEnvOrFatal("JWT_SECRET")
 	validator := auth.NewHMACValidator(secret)
+
+	// Routes exempted from auth
 	exempt := map[string]bool{
 		"/users/register": true,
 		"/auth/login":     true,
@@ -32,7 +37,9 @@ func main() {
 		"/notify":         false,
 		"/notification":   false,
 	}
-	userRepo := user.NewPostgresRepo(db)
+
+	// User management
+	userRepo := user.NewPostgresRepo(dbConn)
 	userService := user.NewUserService(userRepo)
 	userHandler := user.NewUserHandler(userService)
 	mux.HandleFunc("/users/register", middleware.Chain(userHandler.RegisterUser,
@@ -44,6 +51,7 @@ func main() {
 		middleware.AuthMiddleware(exempt, validator),
 	))
 
+	// Auth
 	authService := auth.NewAuthService(userRepo, secret)
 	authHandler := auth.NewAuthHandler(authService)
 	mux.HandleFunc("/auth/login", middleware.Chain(authHandler.Login,
@@ -51,18 +59,23 @@ func main() {
 		middleware.AuthMiddleware(exempt, validator),
 	))
 
-	notificationRepo := notification.NewNotifcationRepo(db)
+	// Notifications
+	notificationRepo := notification.NewNotificationRepo(dbConn)
 	brokers := strings.Split(getEnvOrFatal("KAFKA_BROKERS"), ",")
 	topic := getEnvOrFatal("KAFKA_TOPIC")
 	producer := notification.NewKafkaProducer(brokers, topic)
 	notificationService := notification.NewNotificationService(notificationRepo, producer)
 	notificationHandler := notification.NewNotificationHandler(notificationService)
+
+	// Start Kafka consumer
 	notification.StartConsumer(brokers, topic, notificationRepo)
+
+	// Notification routes
 	mux.HandleFunc("/notify", middleware.Chain(notificationHandler.Notify,
 		middleware.LoggingMiddleware,
 		middleware.AuthMiddleware(exempt, validator),
 	))
-	mux.HandleFunc("/notification", middleware.Chain(notificationHandler.FindNotificationById,
+	mux.HandleFunc("/notification", middleware.Chain(notificationHandler.FindNotificationByID,
 		middleware.LoggingMiddleware,
 		middleware.AuthMiddleware(exempt, validator),
 	))

@@ -1,9 +1,8 @@
 package notification
 
 import (
-	"time"
-
-	"github.com/google/uuid"
+	"encoding/json"
+	"fmt"
 )
 
 type NotificationService struct {
@@ -16,23 +15,35 @@ func NewNotificationService(repo NotificationRepository, producer *KafkaProducer
 }
 
 func (s *NotificationService) Notify(req NotificationRequest) (*Notification, error) {
-	notification := &Notification{
-		ID:        uuid.NewString(),
-		UserID:    req.UserID,
-		Type:      req.Type,
-		Payload:   req.Payload,
-		Status:    "PENDING",
-		CreatedAt: time.Now(),
+	switch req.Type {
+	case "email":
+		var payload EmailPayload
+		if err := json.Unmarshal(req.Payload, &payload); err != nil {
+			return nil, err
+		}
+	case "sms":
+		var payload SMSPayload
+		if err := json.Unmarshal(req.Payload, &payload); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("unsupported notification type: %s", req.Type)
 	}
-	if err := s.repo.Save(notification); err != nil {
+	notif := NewNotification(req)
+
+	// Save to DB
+	if err := s.repo.Save(notif); err != nil {
 		return nil, err
 	}
-	if err := s.producer.Publish(notification); err != nil {
+
+	// Publish to Kafka
+	if err := s.producer.Publish(notif); err != nil {
 		return nil, err
 	}
-	return notification, nil
+
+	return notif, nil
 }
 
-func (s *NotificationService) FindNotificationById(notificationId string) (*Notification, error) {
-	return s.repo.FindById(notificationId)
+func (s *NotificationService) FindNotificationByID(notificationID string) (*Notification, error) {
+	return s.repo.FindByID(notificationID)
 }
