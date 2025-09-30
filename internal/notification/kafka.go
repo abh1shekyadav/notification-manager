@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 
+	"github.com/abh1shekyadav/notification-manager/internal/notifier"
 	"github.com/segmentio/kafka-go"
 )
 
@@ -30,7 +31,7 @@ func (p *KafkaProducer) Publish(notification *Notification) error {
 	return p.writer.WriteMessages(context.Background(), kafka.Message{Value: data})
 }
 
-func StartConsumer(brokers []string, topic string, repo NotificationRepository) {
+func StartConsumer(brokers []string, topic string, repo NotificationRepository, smsNotifier notifier.SMSNotifer, emailNotifier notifier.EmailNotifier) {
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers: brokers,
 		Topic:   topic,
@@ -59,14 +60,29 @@ func StartConsumer(brokers []string, topic string, repo NotificationRepository) 
 					log.Printf("Invalid email payload: %v", err)
 					continue
 				}
-				log.Printf("Sending email to %s: %s", payload.To, payload.Subject)
+				if err := emailNotifier.SendEmail(notifier.SendEmailRequest{
+					To:      payload.To,
+					Subject: payload.Subject,
+					Body:    payload.Body,
+				}); err != nil {
+					log.Printf("Failed to send email: %v", err)
+					repo.UpdateStatus(notif.ID, "FAILED")
+					continue
+				}
 			case "sms":
 				var payload SMSPayload
 				if err := json.Unmarshal(notif.Payload, &payload); err != nil {
 					log.Printf("Invalid SMS payload: %v", err)
 					continue
 				}
-				log.Printf("Sending SMS to %s: %s", payload.To, payload.Message)
+				if err := smsNotifier.SendSMS(notifier.SendSMSRequest{
+					To:      payload.To,
+					Message: payload.Message,
+				}); err != nil {
+					log.Printf("Failed to send SMS: %v", err)
+					repo.UpdateStatus(notif.ID, "FAILED")
+					continue
+				}
 			default:
 				log.Printf("Unknown notification type: %s", notif.Type)
 			}
