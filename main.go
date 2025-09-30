@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/abh1shekyadav/notification-manager/internal/auth"
 	"github.com/abh1shekyadav/notification-manager/internal/db"
+	"github.com/abh1shekyadav/notification-manager/internal/kafka"
 	"github.com/abh1shekyadav/notification-manager/internal/notification"
 	"github.com/abh1shekyadav/notification-manager/internal/notifier"
 	"github.com/abh1shekyadav/notification-manager/internal/user"
@@ -64,7 +66,7 @@ func main() {
 	notificationRepo := notification.NewNotificationRepo(dbConn)
 	brokers := strings.Split(getEnvOrFatal("KAFKA_BROKERS"), ",")
 	topic := getEnvOrFatal("KAFKA_TOPIC")
-	producer := notification.NewKafkaProducer(brokers, topic)
+	producer := kafka.NewKafkaProducer(brokers, topic)
 	notificationService := notification.NewNotificationService(notificationRepo, producer)
 	notificationHandler := notification.NewNotificationHandler(notificationService)
 
@@ -79,8 +81,17 @@ func main() {
 	emailNotifier := notifier.NewSendGridEmailNotifier(sendgridKey, sendgridFrom)
 
 	// Start Kafka consumer
-	notification.StartConsumer(brokers, topic, notificationRepo, smsNotifier, emailNotifier)
+	consumer := kafka.NewConsumer(brokers, topic, "notification-consumer-group")
 
+	go func() {
+		log.Println("Starting Kafka consumer...")
+		err := consumer.Start(context.Background(), func(key, value []byte) error {
+			return notification.HandleMessage(value, notificationRepo, smsNotifier, emailNotifier)
+		})
+		if err != nil {
+			log.Fatalf("Kafka consumer stopped: %v", err)
+		}
+	}()
 	// Notification routes
 	mux.HandleFunc("/notify", middleware.Chain(notificationHandler.Notify,
 		middleware.LoggingMiddleware,

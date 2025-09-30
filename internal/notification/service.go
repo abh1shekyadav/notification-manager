@@ -3,14 +3,16 @@ package notification
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/abh1shekyadav/notification-manager/internal/kafka"
 )
 
 type NotificationService struct {
 	repo     NotificationRepository
-	producer *KafkaProducer
+	producer *kafka.KafkaProducer
 }
 
-func NewNotificationService(repo NotificationRepository, producer *KafkaProducer) *NotificationService {
+func NewNotificationService(repo NotificationRepository, producer *kafka.KafkaProducer) *NotificationService {
 	return &NotificationService{repo: repo, producer: producer}
 }
 
