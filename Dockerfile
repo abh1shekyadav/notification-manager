@@ -3,6 +3,9 @@ FROM golang:1.24-bullseye AS builder
 
 WORKDIR /app
 
+# Install CA certificates (Debian-based image)
+RUN apt-get update && apt-get install -y ca-certificates && update-ca-certificates
+
 # Copy go.mod/go.sum and download deps
 COPY go.mod go.sum ./
 RUN go mod download
@@ -17,6 +20,9 @@ RUN GOOS=linux GOARCH=arm64 go build -o notification-service .
 FROM debian:bullseye-slim
 
 WORKDIR /app
+
+# Install CA certificates in runtime image too
+RUN apt-get update && apt-get install -y ca-certificates && update-ca-certificates
 
 # Copy the built binary
 COPY --from=builder /app/notification-service .

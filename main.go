@@ -9,6 +9,7 @@ import (
 	"github.com/abh1shekyadav/notification-manager/internal/auth"
 	"github.com/abh1shekyadav/notification-manager/internal/db"
 	"github.com/abh1shekyadav/notification-manager/internal/notification"
+	"github.com/abh1shekyadav/notification-manager/internal/notifier"
 	"github.com/abh1shekyadav/notification-manager/internal/user"
 	"github.com/abh1shekyadav/notification-manager/middleware"
 )
@@ -67,8 +68,18 @@ func main() {
 	notificationService := notification.NewNotificationService(notificationRepo, producer)
 	notificationHandler := notification.NewNotificationHandler(notificationService)
 
+	// --- Notifiers (Twilio SMS + SendGrid Email) ---
+	twilioSID := getEnvOrFatal("TWILIO_ACCOUNT_SID")
+	twilioToken := getEnvOrFatal("TWILIO_AUTH_TOKEN")
+	twilioFrom := getEnvOrFatal("TWILIO_FROM_NUMBER")
+	smsNotifier := notifier.NewTwilioSMSNotifier(twilioSID, twilioToken, twilioFrom)
+
+	sendgridKey := getEnvOrFatal("SENDGRID_API_KEY")
+	sendgridFrom := getEnvOrFatal("SENDGRID_FROM_EMAIL")
+	emailNotifier := notifier.NewSendGridEmailNotifier(sendgridKey, sendgridFrom)
+
 	// Start Kafka consumer
-	notification.StartConsumer(brokers, topic, notificationRepo)
+	notification.StartConsumer(brokers, topic, notificationRepo, smsNotifier, emailNotifier)
 
 	// Notification routes
 	mux.HandleFunc("/notify", middleware.Chain(notificationHandler.Notify,
