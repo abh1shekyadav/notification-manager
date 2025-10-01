@@ -3,11 +3,13 @@ package notification
 import (
 	"database/sql"
 	"encoding/json"
+
+	"github.com/abh1shekyadav/notification-manager/internal/model"
 )
 
 type NotificationRepository interface {
-	Save(notification *Notification) error
-	FindByID(notificationID string) (*Notification, error)
+	Save(notification *model.Notification) error
+	FindByID(notificationID string) (*model.Notification, error)
 	UpdateStatus(notificationID string, status string) error
 }
 
@@ -19,7 +21,7 @@ func NewNotificationRepo(db *sql.DB) *NotificationRepo {
 	return &NotificationRepo{db: db}
 }
 
-func (r *NotificationRepo) Save(notification *Notification) error {
+func (r *NotificationRepo) Save(notification *model.Notification) error {
 	_, err := r.db.Exec(`
 		INSERT INTO notifications (id, user_id, type, payload, status, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -28,12 +30,12 @@ func (r *NotificationRepo) Save(notification *Notification) error {
 	return err
 }
 
-func (r *NotificationRepo) FindByID(notificationID string) (*Notification, error) {
+func (r *NotificationRepo) FindByID(notificationID string) (*model.Notification, error) {
 	row := r.db.QueryRow(`
 		SELECT id, user_id, type, payload, status, created_at
 		FROM notifications WHERE id = $1`, notificationID)
 
-	var notification Notification
+	var notification model.Notification
 	var payloadText string
 	err := row.Scan(&notification.ID, &notification.UserID, &notification.Type,
 		&payloadText, &notification.Status, &notification.CreatedAt)

@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/abh1shekyadav/notification-manager/internal/auth"
 	"github.com/abh1shekyadav/notification-manager/internal/db"
+	"github.com/abh1shekyadav/notification-manager/internal/kafka"
 	"github.com/abh1shekyadav/notification-manager/internal/notification"
 	"github.com/abh1shekyadav/notification-manager/internal/notifier"
 	"github.com/abh1shekyadav/notification-manager/internal/user"
@@ -24,6 +27,9 @@ func main() {
 	if dbConn == nil {
 		log.Fatal("Database connection is nil. Check DB_CONN environment variable")
 	}
+	dbConn.SetMaxOpenConns(10)
+	dbConn.SetMaxIdleConns(5)
+	dbConn.SetConnMaxLifetime(time.Hour)
 	defer dbConn.Close()
 
 	// JWT validator
@@ -61,11 +67,13 @@ func main() {
 	))
 
 	// Notifications
+	smsTopic := getEnvOrFatal("KAFKA_TOPIC_NOTIFICATIONS_SMS")
+	emailTopic := getEnvOrFatal("KAFKA_TOPIC_NOTIFICATIONS_EMAIL")
 	notificationRepo := notification.NewNotificationRepo(dbConn)
 	brokers := strings.Split(getEnvOrFatal("KAFKA_BROKERS"), ",")
-	topic := getEnvOrFatal("KAFKA_TOPIC")
-	producer := notification.NewKafkaProducer(brokers, topic)
-	notificationService := notification.NewNotificationService(notificationRepo, producer)
+	smsProducer := kafka.NewKafkaProducer(brokers, smsTopic)
+	emailProducer := kafka.NewKafkaProducer(brokers, emailTopic)
+	notificationService := notification.NewNotificationService(notificationRepo, smsProducer, emailProducer)
 	notificationHandler := notification.NewNotificationHandler(notificationService)
 
 	// --- Notifiers (Twilio SMS + SendGrid Email) ---
@@ -79,8 +87,33 @@ func main() {
 	emailNotifier := notifier.NewSendGridEmailNotifier(sendgridKey, sendgridFrom)
 
 	// Start Kafka consumer
-	notification.StartConsumer(brokers, topic, notificationRepo, smsNotifier, emailNotifier)
+	smsConsumer := kafka.NewConsumer(brokers, smsTopic, "notification-sms-consumer-group")
+	emailConsumer := kafka.NewConsumer(brokers, emailTopic, "notification-email-consumer-group")
 
+	//Currently starting 3 consumers for each type. This can be made configurable via env variables. Also the number or partitions are 5 for each topic.
+	numConsumers := 3
+
+	// SMS consumers
+	for i := 1; i <= numConsumers; i++ {
+		go func(id int) {
+			log.Printf("Starting SMS consumer #%d...", id)
+			handler := notification.NewConsumerHandler(notificationRepo, smsNotifier, nil)
+			if err := smsConsumer.Start(context.Background(), handler); err != nil {
+				log.Fatalf("SMS consumer #%d stopped: %v", id, err)
+			}
+		}(i)
+	}
+
+	// Email consumers
+	for i := 1; i <= numConsumers; i++ {
+		go func(id int) {
+			log.Printf("Starting Email consumer #%d...", id)
+			handler := notification.NewConsumerHandler(notificationRepo, nil, emailNotifier)
+			if err := emailConsumer.Start(context.Background(), handler); err != nil {
+				log.Fatalf("Email consumer #%d stopped: %v", id, err)
+			}
+		}(i)
+	}
 	// Notification routes
 	mux.HandleFunc("/notify", middleware.Chain(notificationHandler.Notify,
 		middleware.LoggingMiddleware,

@@ -3,29 +3,36 @@ package notification
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/abh1shekyadav/notification-manager/internal/kafka"
+	"github.com/abh1shekyadav/notification-manager/internal/model"
 )
 
 type NotificationService struct {
-	repo     NotificationRepository
-	producer *KafkaProducer
+	repo          NotificationRepository
+	smsProducer   *kafka.KafkaProducer
+	emailProducer *kafka.KafkaProducer
 }
 
-func NewNotificationService(repo NotificationRepository, producer *KafkaProducer) *NotificationService {
-	return &NotificationService{repo: repo, producer: producer}
+func NewNotificationService(repo NotificationRepository, smsProducer *kafka.KafkaProducer, emailProducer *kafka.KafkaProducer) *NotificationService {
+	return &NotificationService{repo: repo, smsProducer: smsProducer, emailProducer: emailProducer}
 }
 
-func (s *NotificationService) Notify(req NotificationRequest) (*Notification, error) {
+func (s *NotificationService) Notify(req model.NotificationRequest) (*model.Notification, error) {
+	var producer *kafka.KafkaProducer
 	switch req.Type {
 	case "email":
-		var payload EmailPayload
+		var payload model.EmailPayload
 		if err := json.Unmarshal(req.Payload, &payload); err != nil {
 			return nil, err
 		}
+		producer = s.emailProducer
 	case "sms":
-		var payload SMSPayload
+		var payload model.SMSPayload
 		if err := json.Unmarshal(req.Payload, &payload); err != nil {
 			return nil, err
 		}
+		producer = s.smsProducer
 	default:
 		return nil, fmt.Errorf("unsupported notification type: %s", req.Type)
 	}
@@ -37,13 +44,16 @@ func (s *NotificationService) Notify(req NotificationRequest) (*Notification, er
 	}
 
 	// Publish to Kafka
-	if err := s.producer.Publish(notif); err != nil {
-		return nil, err
+	if producer != nil {
+		if err := producer.Publish(notif); err != nil {
+			_ = s.repo.UpdateStatus(notif.ID, "FAILED")
+			return nil, err
+		}
 	}
 
 	return notif, nil
 }
 
-func (s *NotificationService) FindNotificationByID(notificationID string) (*Notification, error) {
+func (s *NotificationService) FindNotificationByID(notificationID string) (*model.Notification, error) {
 	return s.repo.FindByID(notificationID)
 }
