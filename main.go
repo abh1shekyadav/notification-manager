@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/abh1shekyadav/notification-manager/internal/auth"
 	"github.com/abh1shekyadav/notification-manager/internal/db"
@@ -26,6 +27,9 @@ func main() {
 	if dbConn == nil {
 		log.Fatal("Database connection is nil. Check DB_CONN environment variable")
 	}
+	dbConn.SetMaxOpenConns(10)
+	dbConn.SetMaxIdleConns(5)
+	dbConn.SetConnMaxLifetime(time.Hour)
 	defer dbConn.Close()
 
 	// JWT validator
@@ -85,22 +89,31 @@ func main() {
 	// Start Kafka consumer
 	smsConsumer := kafka.NewConsumer(brokers, smsTopic, "notification-sms-consumer-group")
 	emailConsumer := kafka.NewConsumer(brokers, emailTopic, "notification-email-consumer-group")
-	go func() {
-		log.Println("Starting sms consumer...")
-		handler := notification.NewConsumerHandler(notificationRepo, smsNotifier, nil)
-		err := smsConsumer.Start(context.Background(), handler)
-		if err != nil {
-			log.Fatalf("Kafka consumer stopped: %v", err)
-		}
-	}()
-	go func() {
-		log.Println("Starting email consumer...")
-		handler := notification.NewConsumerHandler(notificationRepo, nil, emailNotifier)
-		err := emailConsumer.Start(context.Background(), handler)
-		if err != nil {
-			log.Fatalf("Kafka consumer stopped: %v", err)
-		}
-	}()
+
+	//Currently starting 3 consumers for each type. This can be made configurable via env variables. Also the number or partitions are 5 for each topic.
+	numConsumers := 3
+
+	// SMS consumers
+	for i := 1; i <= numConsumers; i++ {
+		go func(id int) {
+			log.Printf("Starting SMS consumer #%d...", id)
+			handler := notification.NewConsumerHandler(notificationRepo, smsNotifier, nil)
+			if err := smsConsumer.Start(context.Background(), handler); err != nil {
+				log.Fatalf("SMS consumer #%d stopped: %v", id, err)
+			}
+		}(i)
+	}
+
+	// Email consumers
+	for i := 1; i <= numConsumers; i++ {
+		go func(id int) {
+			log.Printf("Starting Email consumer #%d...", id)
+			handler := notification.NewConsumerHandler(notificationRepo, nil, emailNotifier)
+			if err := emailConsumer.Start(context.Background(), handler); err != nil {
+				log.Fatalf("Email consumer #%d stopped: %v", id, err)
+			}
+		}(i)
+	}
 	// Notification routes
 	mux.HandleFunc("/notify", middleware.Chain(notificationHandler.Notify,
 		middleware.LoggingMiddleware,
