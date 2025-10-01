@@ -27,6 +27,8 @@ services:
       TWILIO_FROM_NUMBER: your-twilio-from-number
       SENDGRID_API_KEY: your-sendgrid-api-key
       SENDGRID_FROM_EMAIL: your-sendgrid-email
+      KAFKA_TOPIC_NOTIFICATIONS_SMS: notifications_sms
+      KAFKA_TOPIC_NOTIFICATIONS_EMAIL: notifications_email
     ports:
       - "8080:8080"
     
@@ -55,3 +57,4 @@ services:
 
 volumes:
   pgdata:
+  
