@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"context"
+	"log"
 
 	"github.com/segmentio/kafka-go"
 )
@@ -31,7 +32,12 @@ func (c *Consumer) Start(ctx context.Context, handler MessageHandler) error {
 			return err
 		}
 		if err := handler(m.Key, m.Value); err != nil {
+			log.Printf("failed to process message (key=%s): %v", string(m.Key), err)
 			// TODO: retry logic / DLQ
 		}
 	}
+}
+
+func (c *Consumer) Close() error {
+	return c.reader.Close()
 }

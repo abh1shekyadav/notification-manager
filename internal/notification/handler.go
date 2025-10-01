@@ -3,6 +3,8 @@ package notification
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/abh1shekyadav/notification-manager/internal/model"
 )
 
 type NotificationHandler struct {
@@ -14,7 +16,7 @@ func NewNotificationHandler(service *NotificationService) *NotificationHandler {
 }
 
 func (h *NotificationHandler) Notify(w http.ResponseWriter, r *http.Request) {
-	var req NotificationRequest
+	var req model.NotificationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return

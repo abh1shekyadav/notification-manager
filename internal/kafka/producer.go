@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/abh1shekyadav/notification-manager/internal/notification"
+	"github.com/abh1shekyadav/notification-manager/internal/model"
 	"github.com/segmentio/kafka-go"
 )
 
@@ -22,7 +22,7 @@ func NewKafkaProducer(brokers []string, topic string) *KafkaProducer {
 	}
 }
 
-func (p *KafkaProducer) Publish(notification *notification.Notification) error {
+func (p *KafkaProducer) Publish(notification *model.Notification) error {
 	data, err := json.Marshal(notification)
 	if err != nil {
 		return err

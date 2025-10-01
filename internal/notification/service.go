@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/abh1shekyadav/notification-manager/internal/kafka"
+	"github.com/abh1shekyadav/notification-manager/internal/model"
 )
 
 type NotificationService struct {
@@ -16,15 +17,15 @@ func NewNotificationService(repo NotificationRepository, producer *kafka.KafkaPr
 	return &NotificationService{repo: repo, producer: producer}
 }
 
-func (s *NotificationService) Notify(req NotificationRequest) (*Notification, error) {
+func (s *NotificationService) Notify(req model.NotificationRequest) (*model.Notification, error) {
 	switch req.Type {
 	case "email":
-		var payload EmailPayload
+		var payload model.EmailPayload
 		if err := json.Unmarshal(req.Payload, &payload); err != nil {
 			return nil, err
 		}
 	case "sms":
-		var payload SMSPayload
+		var payload model.SMSPayload
 		if err := json.Unmarshal(req.Payload, &payload); err != nil {
 			return nil, err
 		}
@@ -46,6 +47,6 @@ func (s *NotificationService) Notify(req NotificationRequest) (*Notification, er
 	return notif, nil
 }
 
-func (s *NotificationService) FindNotificationByID(notificationID string) (*Notification, error) {
+func (s *NotificationService) FindNotificationByID(notificationID string) (*model.Notification, error) {
 	return s.repo.FindByID(notificationID)
 }

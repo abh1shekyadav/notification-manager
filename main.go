@@ -85,9 +85,8 @@ func main() {
 
 	go func() {
 		log.Println("Starting Kafka consumer...")
-		err := consumer.Start(context.Background(), func(key, value []byte) error {
-			return notification.HandleMessage(value, notificationRepo, smsNotifier, emailNotifier)
-		})
+		handler := notification.NewConsumerHandler(notificationRepo, smsNotifier, emailNotifier)
+		err := consumer.Start(context.Background(), handler)
 		if err != nil {
 			log.Fatalf("Kafka consumer stopped: %v", err)
 		}
