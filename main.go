@@ -63,11 +63,13 @@ func main() {
 	))
 
 	// Notifications
+	smsTopic := getEnvOrFatal("KAFKA_TOPIC_NOTIFICATIONS_SMS")
+	emailTopic := getEnvOrFatal("KAFKA_TOPIC_NOTIFICATIONS_EMAIL")
 	notificationRepo := notification.NewNotificationRepo(dbConn)
 	brokers := strings.Split(getEnvOrFatal("KAFKA_BROKERS"), ",")
-	topic := getEnvOrFatal("KAFKA_TOPIC")
-	producer := kafka.NewKafkaProducer(brokers, topic)
-	notificationService := notification.NewNotificationService(notificationRepo, producer)
+	smsProducer := kafka.NewKafkaProducer(brokers, smsTopic)
+	emailProducer := kafka.NewKafkaProducer(brokers, emailTopic)
+	notificationService := notification.NewNotificationService(notificationRepo, smsProducer, emailProducer)
 	notificationHandler := notification.NewNotificationHandler(notificationService)
 
 	// --- Notifiers (Twilio SMS + SendGrid Email) ---
@@ -81,12 +83,20 @@ func main() {
 	emailNotifier := notifier.NewSendGridEmailNotifier(sendgridKey, sendgridFrom)
 
 	// Start Kafka consumer
-	consumer := kafka.NewConsumer(brokers, topic, "notification-consumer-group")
-
+	smsConsumer := kafka.NewConsumer(brokers, smsTopic, "notification-sms-consumer-group")
+	emailConsumer := kafka.NewConsumer(brokers, emailTopic, "notification-email-consumer-group")
 	go func() {
-		log.Println("Starting Kafka consumer...")
-		handler := notification.NewConsumerHandler(notificationRepo, smsNotifier, emailNotifier)
-		err := consumer.Start(context.Background(), handler)
+		log.Println("Starting sms consumer...")
+		handler := notification.NewConsumerHandler(notificationRepo, smsNotifier, nil)
+		err := smsConsumer.Start(context.Background(), handler)
+		if err != nil {
+			log.Fatalf("Kafka consumer stopped: %v", err)
+		}
+	}()
+	go func() {
+		log.Println("Starting email consumer...")
+		handler := notification.NewConsumerHandler(notificationRepo, nil, emailNotifier)
+		err := emailConsumer.Start(context.Background(), handler)
 		if err != nil {
 			log.Fatalf("Kafka consumer stopped: %v", err)
 		}
