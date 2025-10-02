@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/abh1shekyadav/notification-manager/internal/notifier"
 	"github.com/abh1shekyadav/notification-manager/internal/user"
 	"github.com/abh1shekyadav/notification-manager/middleware"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -98,8 +101,8 @@ func main() {
 	// SMS consumers
 	for i := 1; i <= numConsumers; i++ {
 		go func(id int) {
-			log.Printf("Starting SMS consumer #%d...", id)
-			handler := notification.NewConsumerHandler(notificationRepo, smsNotifier, nil, dlqProducer)
+			smsLogger := log.New(os.Stdout, "[SMS Consumer #"+strconv.Itoa(id)+"] ", log.LstdFlags|log.Lshortfile)
+			handler := notification.NewConsumerHandler(notificationRepo, smsNotifier, nil, dlqProducer, smsLogger)
 			if err := smsConsumer.Start(context.Background(), handler); err != nil {
 				log.Fatalf("SMS consumer #%d stopped: %v", id, err)
 			}
@@ -109,8 +112,8 @@ func main() {
 	// Email consumers
 	for i := 1; i <= numConsumers; i++ {
 		go func(id int) {
-			log.Printf("Starting Email consumer #%d...", id)
-			handler := notification.NewConsumerHandler(notificationRepo, nil, emailNotifier, dlqProducer)
+			emailLogger := log.New(os.Stdout, "[Email Consumer #"+strconv.Itoa(id)+"] ", log.LstdFlags|log.Lshortfile)
+			handler := notification.NewConsumerHandler(notificationRepo, nil, emailNotifier, dlqProducer, emailLogger)
 			if err := emailConsumer.Start(context.Background(), handler); err != nil {
 				log.Fatalf("Email consumer #%d stopped: %v", id, err)
 			}
@@ -125,7 +128,8 @@ func main() {
 		middleware.LoggingMiddleware,
 		middleware.AuthMiddleware(exempt, validator),
 	))
-
+	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/healthz", healthHandler(dbConn))
 	log.Println("Server running on :8080")
 	if err := http.ListenAndServe(":8080", mux); err != nil {
 		log.Fatal(err)
@@ -138,4 +142,16 @@ func getEnvOrFatal(key string) string {
 		log.Fatalf("Environment variable %s is required", key)
 	}
 	return val
+}
+
+func healthHandler(dbConn *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := dbConn.Ping(); err != nil {
+			http.Error(w, "DB down: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// Optionally add Kafka ping later
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	}
 }
