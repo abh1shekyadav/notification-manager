@@ -69,10 +69,12 @@ func main() {
 	// Notifications
 	smsTopic := getEnvOrFatal("KAFKA_TOPIC_NOTIFICATIONS_SMS")
 	emailTopic := getEnvOrFatal("KAFKA_TOPIC_NOTIFICATIONS_EMAIL")
+	dlqTopic := getEnvOrFatal("KAFKA_TOPIC_NOTIFICATIONS_DLQ")
 	notificationRepo := notification.NewNotificationRepo(dbConn)
 	brokers := strings.Split(getEnvOrFatal("KAFKA_BROKERS"), ",")
 	smsProducer := kafka.NewKafkaProducer(brokers, smsTopic)
 	emailProducer := kafka.NewKafkaProducer(brokers, emailTopic)
+	dlqProducer := kafka.NewKafkaProducer(brokers, dlqTopic)
 	notificationService := notification.NewNotificationService(notificationRepo, smsProducer, emailProducer)
 	notificationHandler := notification.NewNotificationHandler(notificationService)
 
@@ -97,7 +99,7 @@ func main() {
 	for i := 1; i <= numConsumers; i++ {
 		go func(id int) {
 			log.Printf("Starting SMS consumer #%d...", id)
-			handler := notification.NewConsumerHandler(notificationRepo, smsNotifier, nil)
+			handler := notification.NewConsumerHandler(notificationRepo, smsNotifier, nil, dlqProducer)
 			if err := smsConsumer.Start(context.Background(), handler); err != nil {
 				log.Fatalf("SMS consumer #%d stopped: %v", id, err)
 			}
@@ -108,7 +110,7 @@ func main() {
 	for i := 1; i <= numConsumers; i++ {
 		go func(id int) {
 			log.Printf("Starting Email consumer #%d...", id)
-			handler := notification.NewConsumerHandler(notificationRepo, nil, emailNotifier)
+			handler := notification.NewConsumerHandler(notificationRepo, nil, emailNotifier, dlqProducer)
 			if err := emailConsumer.Start(context.Background(), handler); err != nil {
 				log.Fatalf("Email consumer #%d stopped: %v", id, err)
 			}

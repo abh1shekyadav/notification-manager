@@ -29,6 +29,7 @@ services:
       SENDGRID_FROM_EMAIL: your-sendgrid-email
       KAFKA_TOPIC_NOTIFICATIONS_SMS: notifications_sms
       KAFKA_TOPIC_NOTIFICATIONS_EMAIL: notifications_email
+      KAFKA_TOPIC_NOTIFICATIONS_DLQ: notifications_dlq
     ports:
       - "8080:8080"
     
