@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/abh1shekyadav/notification-manager/internal/kafka"
 	"github.com/abh1shekyadav/notification-manager/internal/model"
 	"github.com/abh1shekyadav/notification-manager/internal/notifier"
 )
@@ -15,6 +16,7 @@ func NewConsumerHandler(
 	repo NotificationRepository,
 	sms notifier.SMSNotifer,
 	email notifier.EmailNotifier,
+	dlqProducer *kafka.KafkaProducer,
 ) func(key, value []byte) error {
 	return func(key, value []byte) error {
 		var notif model.Notification
@@ -35,9 +37,14 @@ func NewConsumerHandler(
 			time.Sleep(time.Duration(1<<uint(attempt-1)) * time.Second) // 1s, 2s, 4s
 		}
 		_ = repo.UpdateStatus(notif.ID, "FAILED")
-		log.Printf("Notification %s moved to FAILED after retries", notif.ID)
+		if dlqProducer != nil {
+			if err := dlqProducer.Publish(&notif); err != nil {
+				log.Printf("Failed to publish to DLQ for notification %s: %v", notif.ID, err)
+			} else {
+				log.Printf("Notification %s sent to DLQ", notif.ID)
+			}
+		}
 		return err
-
 	}
 }
 
