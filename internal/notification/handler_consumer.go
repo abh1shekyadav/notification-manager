@@ -3,10 +3,13 @@ package notification
 import (
 	"encoding/json"
 	"log"
+	"time"
 
 	"github.com/abh1shekyadav/notification-manager/internal/model"
 	"github.com/abh1shekyadav/notification-manager/internal/notifier"
 )
+
+const maxRetries = 3
 
 func NewConsumerHandler(
 	repo NotificationRepository,
@@ -21,43 +24,51 @@ func NewConsumerHandler(
 		}
 
 		log.Printf("Processing notification %s of type %s", notif.ID, notif.Type)
-
-		switch notif.Type {
-		case "sms":
-			var payload model.SMSPayload
-			if err := json.Unmarshal(notif.Payload, &payload); err != nil {
-				_ = repo.UpdateStatus(notif.ID, "FAILED")
-				return err
+		var err error
+		for attempt := 1; attempt <= maxRetries; attempt++ {
+			err = processNotification(notif, sms, email)
+			if err == nil {
+				_ = repo.UpdateStatus(notif.ID, "SENT")
+				return nil
 			}
-			if err := sms.SendSMS(notifier.SendSMSRequest{
+			log.Printf("Attempt %d failed for notification %s: %v", attempt, notif.ID, err)
+			time.Sleep(time.Duration(1<<uint(attempt-1)) * time.Second) // 1s, 2s, 4s
+		}
+		_ = repo.UpdateStatus(notif.ID, "FAILED")
+		log.Printf("Notification %s moved to FAILED after retries", notif.ID)
+		return err
+
+	}
+}
+
+func processNotification(notif model.Notification, sms notifier.SMSNotifer, email notifier.EmailNotifier) error {
+	var err error
+	switch notif.Type {
+	case "sms":
+		var payload model.SMSPayload
+		if err = json.Unmarshal(notif.Payload, &payload); err == nil {
+			err = sms.SendSMS(notifier.SendSMSRequest{
 				To:      payload.To,
 				Message: payload.Message,
-			}); err != nil {
-				_ = repo.UpdateStatus(notif.ID, "FAILED")
-				return err
-			}
-			_ = repo.UpdateStatus(notif.ID, "SENT")
-
-		case "email":
-			var payload model.EmailPayload
-			if err := json.Unmarshal(notif.Payload, &payload); err != nil {
-				_ = repo.UpdateStatus(notif.ID, "FAILED")
-				return err
-			}
-			if err := email.SendEmail(notifier.SendEmailRequest{
+			})
+		}
+	case "email":
+		var payload model.EmailPayload
+		if err = json.Unmarshal(notif.Payload, &payload); err == nil {
+			err = email.SendEmail(notifier.SendEmailRequest{
 				To:      payload.To,
 				Subject: payload.Subject,
 				Body:    payload.Body,
-			}); err != nil {
-				_ = repo.UpdateStatus(notif.ID, "FAILED")
-				return err
-			}
-			_ = repo.UpdateStatus(notif.ID, "SENT")
-
-		default:
-			log.Printf("unsupported notification type: %s", notif.Type)
-			_ = repo.UpdateStatus(notif.ID, "FAILED")
+			})
 		}
+	default:
+		log.Printf("unsupported notification type: %s", notif.Type)
 		return nil
 	}
+	if err != nil {
+		log.Printf("error processing notification %s: %v", notif.ID, err)
+		return err
+	}
+	log.Printf("Successfully processed notification %s", notif.ID)
+	return nil
 }
